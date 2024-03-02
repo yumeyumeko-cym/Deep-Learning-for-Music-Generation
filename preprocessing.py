@@ -2,6 +2,8 @@ import music21 as m21
 import numpy as np
 import os
 from music21 import *
+import json
+
 
 env = environment.Environment()
 env['musicxmlPath'] = r'D:/MuseScore 4/bin/MuseScore4.exe'
@@ -21,6 +23,11 @@ ACCEPTABLE_DURATIONS = [
 ]
 
 SAVE_DIR = "./saved_preprocessed"
+SEQUENCE_LENGTH = 64
+TRAINING_DATASET_FILE_PATH = "./training_dataset.txt"
+MAPPING_FILE_PATH = "./mapping.json"
+
+
 
 
 def load_songs_in_kern(dataset_path):
@@ -153,7 +160,76 @@ def preprocess(dataset_path):
         # Save songs to text file
         with open(save_path, "w", encoding='utf-8') as fp:  # Ensure encoding is set for special characters
             fp.write(song_encoded)
-   
+
+    return preprocessed_dir
+
+
+
+def collating(dataset_path, file_dataset_path, sequence_length):
+    """
+    Generates a file collating all the encoded songs and adding new piece delimiters.
+    
+    :param dataset_path: Path to folder containing the encoded songs.
+    :param file_dataset_path: Path to file for saving songs in a single file.
+    :param sequence_length (int): number of delimiters used to separate songs
+    :return <class 'str'> encoded songs with delimiters
+    """
+    new_song_delimiter = "/ " * sequence_length
+    songs_list = []
+    
+    for path, _, files in os.walk(dataset_path):
+        for file in files:
+            file_path = os.path.join(path, file)
+            with open(file_path, 'r') as f:
+                song = f.read()
+                songs_list.append(song + " " + new_song_delimiter)
+    
+    # Join all songs and delimiters, then trim the last delimiter
+    songs = ''.join(songs_list).rstrip('/ ')
+    
+    with open(file_dataset_path, "w") as fp:
+        fp.write(songs)
+    
+    return songs
+    
+def load(file_path):
+    with open(file_path, 'r') as file:
+        file_contents = file.read()
+    return file_contents
+
+def mapping(file_dataset_path, file_mapping_path):
+    """
+    Generate a mapping from each unique symbol in the encoded songs to an integer.
+    
+    :param songs: String containing all encoded songs with delimiters.
+    :param file_mapping_path: Path to file for saving the mapping as JSON.
+    """
+    # Split the songs string into a list of symbols
+    songs = load(file_dataset_path)
+    #print(songs)
+    #print('\n')
+    symbols = songs.split(" ")
+    #print(symbols)
+    # Remove empty symbols caused by consecutive spaces
+    symbols = [symbol for symbol in symbols if symbol != ""]
+    
+    # Use a set to find unique symbols
+    unique_symbols = set(symbols)
+    # print(unique_symbols)
+    # for symbol in enumerate(unique_symbols):
+    #     print(symbol)
+    # Create a mapping from symbols to integers
+    symbol_to_int = {symbol: i for i, symbol in enumerate(unique_symbols)}
+    
+    # Save the mapping to a JSON file
+    with open(file_mapping_path, "w") as f:
+        json.dump(symbol_to_int, f, indent=4)
+
+    return symbol_to_int
+
+
+
+
 
 if __name__ == '__main__':
     songs = load_songs_in_kern(DATASET_PATH)
@@ -163,7 +239,8 @@ if __name__ == '__main__':
 
 
     #song_test.show()
-    sont_test_transposed.show()
+    #sont_test_transposed.show()
 
-    preprocess(DATASET_PATH)
-
+    preprocessed_dir = preprocess(DATASET_PATH)
+    collating(preprocessed_dir, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
+    mapping(TRAINING_DATASET_FILE_PATH, MAPPING_FILE_PATH)

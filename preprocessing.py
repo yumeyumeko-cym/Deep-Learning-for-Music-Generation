@@ -20,6 +20,7 @@ ACCEPTABLE_DURATIONS = [
     4 # whole note
 ]
 
+SAVE_DIR = "./saved_preprocessed"
 
 
 def load_songs_in_kern(dataset_path):
@@ -45,12 +46,12 @@ def valid_durations(song, acceptable_durations):
     """
     Check if all notes and rests have acceptable durations.
 
-    :param song (m21 stream):
+    :param song (m21 stream)
     :param acceptable_durations (list): List of acceptable duration in quarter length
     :return (bool):
     """
     
-    return all(note.duration.quarterLength in acceptable_durations for note in song.flat.notesAndRests)
+    return all(note.duration.quarterLength in acceptable_durations for note in song.flatten().notesAndRests)
 
 """
 Music Transpose
@@ -70,8 +71,8 @@ def transpose_to_Cmaj_Amin(song):
     """
     Transposes a song to C major or A minor.
 
-    :param song: A music21 stream object representing the piece to transpose.
-    :return: A music21 stream object of the transposed song.
+    :param song (m21 stream)
+    :return transposed song (m21 stream)
     """
     # Analyze the key of the song
     original_key = song.analyze('key')
@@ -87,7 +88,42 @@ def transpose_to_Cmaj_Amin(song):
     
     return transposed_song
 
+def encode(song, time_step=0.25):
+    """
+    p=60, d=1.0 -> 60, _, _, _
 
+    interger for notes, 'r' for representing a rest, and '_' for representing notes/rests that are carried over into a new time step.
+
+    :param song (m21 stream)
+    :param time_step (float): Duration of each time step in quarter length
+    :return encoded song (str)
+    """            
+
+    encoded_sequence = []
+
+    for elem in song.flatten().notesAndRests:
+        if isinstance(elem, note.Note):
+            symbol = elem.pitch.midi
+
+        elif isinstance(elem, note.Rest):
+            symbol = "r"
+        
+
+        steps = int(elem.duration.quarterLength / time_step)
+        
+        for step_index in range(steps):
+            if step_index == 0:
+                # Encode the symbol directly for the first step
+                encoded_sequence.append(symbol)
+            else:
+                # Use '_' to indicate continuation for subsequent steps
+                encoded_sequence.append('_')
+
+    # Convert the list of encoded elements into a single string for output
+    encoded_string = " ".join(str(item) for item in encoded_sequence)
+
+
+    return encoded_string
 
 
 
@@ -102,16 +138,32 @@ def preprocess(dataset_path):
 
         # transpose song to Cmaj/Amin
         song = transpose_to_Cmaj_Amin(song)
-    
+
+        # encode song
+        song_encoded = encode(song)
+
+        # Ensure the 'preprocessed' directory exists
+        preprocessed_dir = os.path.join(SAVE_DIR, "preprocessed")
+        os.makedirs(preprocessed_dir, exist_ok=True)
+
+        # Handle potential issues with special characters in file names
+        safe_title = song.metadata.title.replace(os.sep, "_").replace("\x84", "ae")
+        save_path = os.path.join(preprocessed_dir, safe_title + ".txt")  # Adding .txt extension
+
+        # Save songs to text file
+        with open(save_path, "w", encoding='utf-8') as fp:  # Ensure encoding is set for special characters
+            fp.write(song_encoded)
    
 
 if __name__ == '__main__':
     songs = load_songs_in_kern(DATASET_PATH)
     
-    song_test = songs[4]
+    song_test = songs[0]
     sont_test_transposed = transpose_to_Cmaj_Amin(song_test)
 
 
-    song_test.show()
+    #song_test.show()
     sont_test_transposed.show()
+
+    preprocess(DATASET_PATH)
 

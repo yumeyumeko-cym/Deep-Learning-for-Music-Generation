@@ -3,6 +3,9 @@ import numpy as np
 import os
 from music21 import *
 import json
+import torch
+from torch.utils.data import Dataset, DataLoader
+from MusicDataset import MusicDataset
 
 
 env = environment.Environment()
@@ -138,7 +141,7 @@ def encode(song, time_step=0.25):
 def preprocess(dataset_path):
 
     songs = load_songs_in_kern(dataset_path)
-    
+    print(f"Loaded {len(songs)} songs.")
     for song in songs:
         if not valid_durations(song, ACCEPTABLE_DURATIONS):
             continue
@@ -197,7 +200,7 @@ def load(file_path):
         file_contents = file.read()
     return file_contents
 
-def mapping(file_dataset_path, file_mapping_path):
+def map_json(songs, file_mapping_path):
     """
     Generate a mapping from each unique symbol in the encoded songs to an integer.
     
@@ -205,7 +208,7 @@ def mapping(file_dataset_path, file_mapping_path):
     :param file_mapping_path: Path to file for saving the mapping as JSON.
     """
     # Split the songs string into a list of symbols
-    songs = load(file_dataset_path)
+    #songs = load(file_dataset_path)
     #print(songs)
     #print('\n')
     symbols = songs.split(" ")
@@ -227,8 +230,26 @@ def mapping(file_dataset_path, file_mapping_path):
 
     return symbol_to_int
 
+def mapped_songs(file_mapping_path, songs):
+    """
+    Generate mapped songs for training
 
+    :param file_mapping_path: Path to file containing the mapping as JSON.
+    :param songs: String containing all encoded songs with delimiters.
+    :return: List of mapped songs
+    """
+    mapped_songs = []
+    # Load the mapping from JSON
+    with open(file_mapping_path, "r") as f:
+        mapping = json.load(f)
 
+    # Split the songs string into a list of symbols
+    songs = songs.split(" ")
+    for symbol in songs:
+        # Map each symbol to an integer
+        mapped_songs.append(mapping[symbol])
+
+    return mapped_songs
 
 
 if __name__ == '__main__':
@@ -243,4 +264,19 @@ if __name__ == '__main__':
 
     preprocessed_dir = preprocess(DATASET_PATH)
     collating(preprocessed_dir, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
-    mapping(TRAINING_DATASET_FILE_PATH, MAPPING_FILE_PATH)
+    songs = load(TRAINING_DATASET_FILE_PATH)
+    map_json(songs, MAPPING_FILE_PATH)
+    mapped_songs = mapped_songs(MAPPING_FILE_PATH, songs)
+    #print(mapped_songs[:20])
+    dataset = MusicDataset(mapped_songs, SEQUENCE_LENGTH)
+    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
+
+    # # Iterate through the DataLoader to get batches
+    for i, (input, target) in enumerate(dataloader):
+        print(f"Batch {i+1}")
+        print(f"Input Shape: {input.shape}")  # Should be [batch_size, sequence_length, vocab_size]
+        print(f"Target Shape: {target.shape}")  # Should be [batch_size]
+        print(f"Sample target Output: {target[0:30]}")  # Should be an integer
+        # Optionally, inspect the actual data (in a more interpretable format if necessary)
+        if i == 1:  # Just as an example, break after the second batch
+            break

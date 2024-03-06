@@ -6,14 +6,14 @@ import json
 import torch
 from torch.utils.data import Dataset, DataLoader
 from MusicDataset import MusicDataset
-
+from tqdm import tqdm
 
 env = environment.Environment()
 env['musicxmlPath'] = r'D:/MuseScore 4/bin/MuseScore4.exe'
 env['musescoreDirectPNGPath'] = r'D:/MuseScore 4/bin/MuseScore4.exe'
 
 
-DATASET_PATH = "./test"
+DATASET_PATH = "deutschl/erk"
 ACCEPTABLE_DURATIONS = [
     0.25, # 16th note
     0.5, # 8th note
@@ -27,8 +27,8 @@ ACCEPTABLE_DURATIONS = [
 
 SAVE_DIR = "./saved_preprocessed"
 SEQUENCE_LENGTH = 64
-TRAINING_DATASET_FILE_PATH = "./training_dataset.txt"
-MAPPING_FILE_PATH = "./mapping.json"
+TRAINING_DATASET_FILE_PATH = "training_dataset.txt"
+MAPPING_FILE_PATH = "mapping.json"
 
 
 
@@ -139,10 +139,10 @@ def encode(song, time_step=0.25):
 
 
 def preprocess(dataset_path):
-
     songs = load_songs_in_kern(dataset_path)
     print(f"Loaded {len(songs)} songs.")
-    for song in songs:
+    
+    for i, song in tqdm(enumerate(songs), total=len(songs), desc="Processing songs"):
         if not valid_durations(song, ACCEPTABLE_DURATIONS):
             continue
 
@@ -153,19 +153,20 @@ def preprocess(dataset_path):
         song_encoded = encode(song)
 
         # Ensure the 'preprocessed' directory exists
-        preprocessed_dir = os.path.join(SAVE_DIR, "preprocessed")
-        os.makedirs(preprocessed_dir, exist_ok=True)
-
-        # Handle potential issues with special characters in file names
-        safe_title = song.metadata.title.replace(os.sep, "_").replace("\x84", "ae")
-        save_path = os.path.join(preprocessed_dir, safe_title + ".txt")  # Adding .txt extension
-
+        preprocessed_file = os.path.join(SAVE_DIR, str(i))
+        
         # Save songs to text file
-        with open(save_path, "w", encoding='utf-8') as fp:  # Ensure encoding is set for special characters
+        with open(preprocessed_file, "w") as fp:  # Ensure encoding is set for special characters
             fp.write(song_encoded)
 
-    return preprocessed_dir
+            
+    return preprocessed_file
 
+
+def load(file_path):
+    with open(file_path, 'r') as file:
+        file_contents = file.read()
+    return file_contents
 
 
 def collating(dataset_path, file_dataset_path, sequence_length):
@@ -178,27 +179,25 @@ def collating(dataset_path, file_dataset_path, sequence_length):
     :return <class 'str'> encoded songs with delimiters
     """
     new_song_delimiter = "/ " * sequence_length
-    songs_list = []
-    
+    songs = ""
+
+    # load encoded songs and add delimiters
     for path, _, files in os.walk(dataset_path):
         for file in files:
             file_path = os.path.join(path, file)
-            with open(file_path, 'r') as f:
-                song = f.read()
-                songs_list.append(song + " " + new_song_delimiter)
-    
-    # Join all songs and delimiters, then trim the last delimiter
-    songs = ''.join(songs_list).rstrip('/ ')
-    
+            song = load(file_path)
+            songs = songs + song + " " + new_song_delimiter
+
+    # remove empty space from last character of string
+    songs = songs[:-1]
+
+    # save string that contains all the dataset
     with open(file_dataset_path, "w") as fp:
         fp.write(songs)
-    
+
     return songs
     
-def load(file_path):
-    with open(file_path, 'r') as file:
-        file_contents = file.read()
-    return file_contents
+
 
 def map_json(songs, file_mapping_path):
     """
@@ -251,32 +250,60 @@ def mapped_songs(file_mapping_path, songs):
 
     return mapped_songs
 
+def generate_training_sequences_pytorch(sequence_length):
+    """Create input and output data samples for training in PyTorch. Each sample is a sequence.
+
+    :param sequence_length (int): Length of each sequence. With a quantisation at 16th notes, 64 notes equates to 4 bars
+
+    :return inputs (Tensor): Training inputs
+    :return targets (Tensor): Training targets
+    """
+
+    inputs = []
+    targets = []
+
+    songs = load(TRAINING_DATASET_FILE_PATH)
+    int_songs = mapped_songs(MAPPING_FILE_PATH, songs)
+
+
+    # Generate the training sequences
+    num_sequences = len(int_songs) - sequence_length
+    for i in range(num_sequences):
+        inputs.append(int_songs[i:i+sequence_length])
+        targets.append(int_songs[i+sequence_length])
+
+    vocabulary_size = len(set(int_songs))
+
+    # Convert inputs to one-hot encoded tensors
+    inputs_one_hot = torch.zeros(len(inputs), sequence_length, vocabulary_size)
+    for i, sequence in enumerate(inputs):
+        for j, index in enumerate(sequence):
+            inputs_one_hot[i, j, index] = 1.0
+
+    targets = torch.tensor(targets)
+
+    dataset = MusicDataset(inputs_one_hot, targets)
+    print(f"There are {len(inputs)} sequences.")
+
+    return dataset
+
+
+    
+
+
+
+def main():
+    preprocess(DATASET_PATH)
+    songs = collating(SAVE_DIR, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
+    map_json(songs, MAPPING_FILE_PATH)
+    dataset = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
+    print(type(dataset))
+
+
+
+
+
+
 
 if __name__ == '__main__':
-    songs = load_songs_in_kern(DATASET_PATH)
-    
-    song_test = songs[0]
-    sont_test_transposed = transpose_to_Cmaj_Amin(song_test)
-
-
-    #song_test.show()
-    #sont_test_transposed.show()
-
-    preprocessed_dir = preprocess(DATASET_PATH)
-    collating(preprocessed_dir, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
-    songs = load(TRAINING_DATASET_FILE_PATH)
-    map_json(songs, MAPPING_FILE_PATH)
-    mapped_songs = mapped_songs(MAPPING_FILE_PATH, songs)
-    #print(mapped_songs[:20])
-    dataset = MusicDataset(mapped_songs, SEQUENCE_LENGTH)
-    dataloader = DataLoader(dataset, batch_size=64, shuffle=True)
-
-    # # Iterate through the DataLoader to get batches
-    for i, (input, target) in enumerate(dataloader):
-        print(f"Batch {i+1}")
-        print(f"Input Shape: {input.shape}")  # Should be [batch_size, sequence_length, vocab_size]
-        print(f"Target Shape: {target.shape}")  # Should be [batch_size]
-        print(f"Sample target Output: {target[0:30]}")  # Should be an integer
-        # Optionally, inspect the actual data (in a more interpretable format if necessary)
-        if i == 1:  # Just as an example, break after the second batch
-            break
+    main()

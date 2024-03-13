@@ -4,6 +4,7 @@ import os
 from music21 import *
 import json
 import torch
+import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 from MusicDataset import MusicDataset
 from tqdm import tqdm
@@ -13,7 +14,7 @@ env['musicxmlPath'] = r'D:/MuseScore 4/bin/MuseScore4.exe'
 env['musescoreDirectPNGPath'] = r'D:/MuseScore 4/bin/MuseScore4.exe'
 
 
-DATASET_PATH = "deutschl/erk"
+DATASET_PATH = "deutschl/test"
 ACCEPTABLE_DURATIONS = [
     0.25, # 16th note
     0.5, # 8th note
@@ -195,33 +196,30 @@ def collating(dataset_path, file_dataset_path, sequence_length):
     with open(file_dataset_path, "w") as fp:
         fp.write(songs)
 
-    return songs
+    return
     
 
 
-def map_json(songs, file_mapping_path):
+def map_json(file_dataset_path, file_mapping_path):
     """
-    Generate a mapping from each unique symbol in the encoded songs to an integer.
+    Generate a mapping from each unique symbol in the encoded songs to an integer, reading the songs from a file.
     
-    :param songs: String containing all encoded songs with delimiters.
+    :param file_dataset_path: Path to file containing all encoded songs with delimiters.
     :param file_mapping_path: Path to file for saving the mapping as JSON.
     """
-    # Split the songs string into a list of symbols
-    #songs = load(file_dataset_path)
-    #print(songs)
-    #print('\n')
+    # Read the encoded songs from the file
+    
+    songs = load(file_dataset_path)
+    
     symbols = songs.split(" ")
-    #print(symbols)
     # Remove empty symbols caused by consecutive spaces
     symbols = [symbol for symbol in symbols if symbol != ""]
     
     # Use a set to find unique symbols
     unique_symbols = set(symbols)
-    # print(unique_symbols)
-    # for symbol in enumerate(unique_symbols):
-    #     print(symbol)
+    
     # Create a mapping from symbols to integers
-    symbol_to_int = {symbol: i for i, symbol in enumerate(unique_symbols)}
+    symbol_to_int = {symbol: i for i, symbol in enumerate(sorted(unique_symbols))}
     
     # Save the mapping to a JSON file
     with open(file_mapping_path, "w") as f:
@@ -229,7 +227,7 @@ def map_json(songs, file_mapping_path):
 
     return symbol_to_int
 
-def mapped_songs(file_mapping_path, songs):
+def mapping_songs(file_mapping_path, songs):
     """
     Generate mapped songs for training
 
@@ -251,7 +249,9 @@ def mapped_songs(file_mapping_path, songs):
     return mapped_songs
 
 def generate_training_sequences_pytorch(sequence_length):
-    """Create input and output data samples for training in PyTorch. Each sample is a sequence.
+    """
+    
+    Create input and output data samples for training in PyTorch. Each sample is a sequence.
 
     :param sequence_length (int): Length of each sequence. With a quantisation at 16th notes, 64 notes equates to 4 bars
 
@@ -263,29 +263,24 @@ def generate_training_sequences_pytorch(sequence_length):
     targets = []
 
     songs = load(TRAINING_DATASET_FILE_PATH)
-    int_songs = mapped_songs(MAPPING_FILE_PATH, songs)
+    mapped_songs = mapping_songs(MAPPING_FILE_PATH, songs)
 
 
     # Generate the training sequences
-    num_sequences = len(int_songs) - sequence_length
+    num_sequences = len(mapped_songs) - sequence_length
+
     for i in range(num_sequences):
-        inputs.append(int_songs[i:i+sequence_length])
-        targets.append(int_songs[i+sequence_length])
+        inputs.append(mapped_songs[i:i+sequence_length])
+        targets.append(mapped_songs[i+sequence_length])
 
-    vocabulary_size = len(set(int_songs))
+    vocabulary_size = len(set(mapped_songs))
 
-    # Convert inputs to one-hot encoded tensors
-    inputs_one_hot = torch.zeros(len(inputs), sequence_length, vocabulary_size)
-    for i, sequence in enumerate(inputs):
-        for j, index in enumerate(sequence):
-            inputs_one_hot[i, j, index] = 1.0
+    inputs_tensor = torch.tensor(inputs, dtype=torch.long)
+    targets_tensor = torch.tensor(targets, dtype=torch.long)
 
-    targets = torch.tensor(targets)
+    inputs_one_hot = F.one_hot(inputs_tensor, num_classes=vocabulary_size).float()
 
-    dataset = MusicDataset(inputs_one_hot, targets)
-    print(f"There are {len(inputs)} sequences.")
-
-    return dataset
+    return inputs_one_hot, targets_tensor
 
 
     
@@ -294,10 +289,14 @@ def generate_training_sequences_pytorch(sequence_length):
 
 def main():
     preprocess(DATASET_PATH)
-    songs = collating(SAVE_DIR, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
-    map_json(songs, MAPPING_FILE_PATH)
-    dataset = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
-    print(type(dataset))
+    collating(SAVE_DIR, TRAINING_DATASET_FILE_PATH, SEQUENCE_LENGTH)
+    map_json(TRAINING_DATASET_FILE_PATH, MAPPING_FILE_PATH)
+    input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
+    #print(input.shape) #[2512, 64, 44] 362178 sequences, 64 notes, 44 unique notes
+    #print(target.shape)
+
+    music_dataset = MusicDataset(input, target)
+
 
 
 

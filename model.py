@@ -146,6 +146,7 @@ def main():
     input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
     #music_dataset = MusicDataset(input, target)
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
+    '''
     lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
     train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
 
@@ -162,7 +163,23 @@ def main():
     plt.legend()
     plt.grid(True)
     plt.show()
+    '''
+    lstm_model = myBiLSTM(input_size, hidden_size, num_layers, output_unit)
+    train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
 
+    # save the model
+    model_save_path = "trained_bi_lstm_model.pth"
+    torch.save(lstm_model.state_dict(), model_save_path)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_risk, label='Training Loss')
+    plt.plot(test_risk, label='Test Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.title('Training Loss Over Epochs')
+    plt.legend()
+    plt.grid(True)
+    plt.show()
 
 
 

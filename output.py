@@ -63,7 +63,7 @@ def save_melody_to_midi(notes, file_name="generated_melody.mid"):
     stream.write('midi', fp=file_name)
 
 # load the model
-lstm_model = myLSTM(INPUT_SIZE, HIDDEN_SIZE, NUM_LAYER, OUTPUT_UNIT)
+lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
 lstm_model.load_state_dict(torch.load('trained_lstm_model.pth', map_location=device))
 
 seed = "60 _ 60 _ 62 _ 64 _ | 60 _ 60 _ 60 _ 62 _ | 60 _ 62 _ 64 _ 65 _ | 67 _ _ 65 _60 _ 60 _ 62 _ 64 _ | 60 _ 60 _ 60 _ 62 _ | 67 _ 62 _ 64 _ 65 _ | 67 _ _ 65 _62 _ 62 _ 64 _ 62 _ | 60 _ 67 _ 65 _ | 62 _ 62 _ 64 _ 62 _ | 60 _ 59 _ 59 _ 57 _"

@@ -146,7 +146,7 @@ def main():
     input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
     #music_dataset = MusicDataset(input, target)
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
-    '''
+    
     lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
     train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
 
@@ -181,6 +181,7 @@ def main():
     plt.grid(True)
     plt.show()
 
+    '''
 
 
 

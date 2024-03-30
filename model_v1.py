@@ -46,16 +46,22 @@ class myLSTM(nn.Module):
         self.input_size = input_size
         self.num_layers = num_layers
         
+        
 
         self.dropout = nn.Dropout(0.2)
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
+        # Adding a Batch Normalization layer after LSTM
+        self.batchnorm = nn.BatchNorm1d(hidden_size)
         self.fc = nn.Linear(hidden_size, num_classes)
     
     def forward(self, x):
         # Set initial hidden and cell states
         lstm_out, (h_n, c_n) = self.lstm(x)
         lstm_out = lstm_out[:, -1, :]
+        # Applying batch normalization
+        lstm_out = self.batchnorm(lstm_out)
+
         out = self.dropout(lstm_out)
         out = self.fc(out)
 

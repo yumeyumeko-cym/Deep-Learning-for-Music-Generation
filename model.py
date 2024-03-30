@@ -38,37 +38,6 @@ def data_splitter(X, v, batch_size, train_size):
     return X_train, v_train, X_test, v_test
 
 
-
-# LSTM model
-class myLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, num_layers, num_classes):
-        super(myLSTM, self).__init__()
-        self.batch_size = batch_size
-        self.hidden_size = hidden_size
-        self.input_size = input_size
-        self.num_layers = num_layers
-        
-        
-
-        self.dropout = nn.Dropout(0.2)
-
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
-        # Adding a Batch Normalization layer after LSTM
-        self.batchnorm = nn.BatchNorm1d(hidden_size)
-        self.fc = nn.Linear(hidden_size, num_classes)
-    
-    def forward(self, x):
-        # Set initial hidden and cell states
-        lstm_out, (h_n, c_n) = self.lstm(x)
-        lstm_out = lstm_out[:, -1, :]
-        # Applying batch normalization
-        lstm_out = self.batchnorm(lstm_out)
-
-        out = self.dropout(lstm_out)
-        out = self.fc(out)
-
-        return out
-
 # Bi-LSTM model
 class myBiLSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes):
@@ -157,23 +126,6 @@ def main():
     #music_dataset = MusicDataset(input, target)
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
     
-    lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
-    train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
-
-    # save the model
-    model_save_path = "trained_lstm_model.pth"
-    torch.save(lstm_model.state_dict(), model_save_path)
-
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_risk, label='Training Loss')
-    plt.plot(test_risk, label='Test Loss')
-    plt.xlabel('Epochs')
-    plt.ylabel('Loss')
-    plt.title('Training Loss Over Epochs')
-    plt.legend()
-    plt.grid(True)
-    plt.show()
-    '''
     lstm_model = myBiLSTM(input_size, hidden_size, num_layers, output_unit)
     train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
 
@@ -191,7 +143,6 @@ def main():
     plt.grid(True)
     plt.show()
 
-    '''
 
 
 

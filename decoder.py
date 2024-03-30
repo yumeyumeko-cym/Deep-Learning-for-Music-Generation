@@ -1,7 +1,8 @@
 import numpy as np
 import torch
 import music21 as m21
-from model_v1 import *
+from model_lstm import *
+from model_bilstm import *
 from preprocessing import *
 import torch.nn.functional as F
 

@@ -14,10 +14,10 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 hidden_size = 256
 input_size = 18 # number of features in json file
 num_layers = 2
-output_unit = 38
+output_unit = 18
 
 # training parameters
-n_epochs = 200   # number of epochs
+n_epochs = 30   # number of epochs
 batch_size = 64  # batch size
 
 

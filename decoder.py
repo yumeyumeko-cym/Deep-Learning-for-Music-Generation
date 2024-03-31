@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 import music21 as m21
-from model_lstm import *
+from model_bilstm import *
 from preprocessing import *
 import torch.nn.functional as F
 
@@ -70,10 +70,14 @@ def save_melody_to_midi(notes, file_name="generated_melody.mid"):
     stream.write('midi', fp=file_name)
 
 # load the model
-lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
-lstm_model.load_state_dict(torch.load('trained_lstm_model.pth', map_location=device))
+#lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
+lstm_model = myBiLSTM(input_size, hidden_size, num_layers, output_unit)
 
-seed = "60 _ 60 _ 69 _ _ 65 63 _ 64 _ 64 _ _"
-sequence_length = 200
-notes = generate_music_sequence(lstm_model, seed, sequence_length, temperature=1.2)
+#lstm_model.load_state_dict(torch.load('trained_lstm_model.pth', map_location=device))
+lstm_model.load_state_dict(torch.load('trained_bi_lstm_model.pth', map_location=device))
+
+seed = "67 _ 67 _ 67 _ _ 65 64 _ 64 _ 64 _ _"
+seed2 = "64 _ 69 _ _ _ 71 _ 72 _ _ 71 69 _ 76 _ _ _ _ _ 71 _ _ _ 74 _ 72 _ _ "
+sequence_length = 50
+notes = generate_music_sequence(lstm_model, seed2, sequence_length, temperature=0.8)
 save_melody_to_midi(notes, "generated_melody4.mid")

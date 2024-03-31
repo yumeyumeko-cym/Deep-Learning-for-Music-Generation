@@ -11,11 +11,11 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 # Hyperparameters
 hidden_size = 256
 input_size = 18 # number of features in json file
-num_layers = 2
+num_layers = 3
 output_unit = 18
 
 # training parameters
-n_epochs = 200   # number of epochs
+n_epochs = 100   # number of epochs
 batch_size = 64  # batch size
 
 
@@ -52,7 +52,7 @@ class myLSTM(nn.Module):
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         # Adding a Batch Normalization layer after LSTM
-        self.batchnorm = nn.BatchNorm1d(hidden_size)
+        #self.batchnorm = nn.BatchNorm1d(hidden_size)
         self.fc = nn.Linear(hidden_size, num_classes)
     
     def forward(self, x):
@@ -60,7 +60,7 @@ class myLSTM(nn.Module):
         lstm_out, (h_n, c_n) = self.lstm(x)
         lstm_out = lstm_out[:, -1, :]
         # Applying batch normalization
-        lstm_out = self.batchnorm(lstm_out)
+        #lstm_out = self.batchnorm(lstm_out)
 
         out = self.dropout(lstm_out)
         out = self.fc(out)

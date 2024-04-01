@@ -6,7 +6,10 @@ from preprocessing import *
 import torch.nn.functional as F
 
 # Sample with temperature
-def sample_with_temperature(logits, temperature=1.0):
+def sample_with_temperature(logits, sequence_length, max_sequence_length, temperature=1.0):
+    if temperature is None:
+        # dynamic temperature adjustment
+        temperature = max(0.5, 1 - (sequence_length / max_sequence_length))
     probabilities = torch.softmax(logits / temperature, dim=0)
     sampled_indices = torch.multinomial(probabilities, 1)
     return sampled_indices.squeeze().cpu().numpy()
@@ -23,13 +26,15 @@ def int_to_note(integers):
     return notes
 
 # generate music sequence
-def generate_music_sequence(model, seed, sequence_length, temperature=1.0):
+def generate_music_sequence(model, seed, max_sequence_length, temperature=1.0):
     seed_integers = [mappings[note] if note in mappings else 0 for note in seed.split()]  # Convert seed to integers
     generated_sequence = seed_integers.copy()
 
     model.eval().to(device)
     with torch.no_grad():
-        for _ in range(sequence_length):
+        # Change the loop to iterate until the generated sequence reaches max_sequence_length
+        while len(generated_sequence) < max_sequence_length:
+            current_sequence_length = len(generated_sequence)  # Now accurately reflects the number of notes generated so far
             #print(generated_sequence)
             input_sequence = generated_sequence[-SEQUENCE_LENGTH:]
             input_sequence += [0] * (SEQUENCE_LENGTH - len(input_sequence))  # Pad sequence
@@ -39,11 +44,9 @@ def generate_music_sequence(model, seed, sequence_length, temperature=1.0):
             input_tensor_one_hot = F.one_hot(input_tensor, num_classes=len(mappings)).float().to(device)
 
             logits = model(input_tensor_one_hot)
-            # print(logits)
-            next_note = sample_with_temperature(logits, temperature)
+            next_note = sample_with_temperature(logits, current_sequence_length, max_sequence_length, temperature)
             next_note = next_note.item()
             generated_sequence.append(next_note)
-
 
     generated_notes = [inv_mappings.get(i, '_') for i in generated_sequence]  # Convert back to notes
     return generated_notes
@@ -59,7 +62,7 @@ def save_melody_to_midi(notes, file_name="generated_melody.mid"):
         else:
             if note_val == 'r':
                 m21_note = m21.note.Rest(quarterLength=current_duration)
-            elif note_val in ['/']:
+            elif note_val in ['/','|']:
                 continue
             else:
                 m21_note = m21.note.Note(int(note_val), quarterLength=current_duration) if note_val.isdigit() else None

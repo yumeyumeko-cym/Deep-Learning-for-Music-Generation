@@ -52,7 +52,7 @@ class myLSTM(nn.Module):
 
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True)
         # Adding a Batch Normalization layer after LSTM
-        #self.batchnorm = nn.BatchNorm1d(hidden_size)
+        self.batchnorm = nn.BatchNorm1d(hidden_size)
         self.fc = nn.Linear(hidden_size, num_classes)
     
     def forward(self, x):
@@ -60,7 +60,7 @@ class myLSTM(nn.Module):
         lstm_out, (h_n, c_n) = self.lstm(x)
         lstm_out = lstm_out[:, -1, :]
         # Applying batch normalization
-        #lstm_out = self.batchnorm(lstm_out)
+        lstm_out = self.batchnorm(lstm_out)
 
         out = self.dropout(lstm_out)
         out = self.fc(out)
@@ -68,59 +68,67 @@ class myLSTM(nn.Module):
         return out
 
 
-def training_loop(model, n_epochs, batch_size, X_train, v_train, X_test, v_test):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+def training_loop(model, n_epochs, X_train, v_train, X_test, v_test):
     model.to(device)
     
     loss_fn = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-
+    
     train_dataset = TensorDataset(X_train, v_train)
     test_dataset = TensorDataset(X_test, v_test)
-
+    
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size)
-
-    train_risk, test_risk = [], []
-
-    for epoch in tqdm(range(n_epochs), unit="epoch"):
+    
+    history = {
+        "train_loss": [],
+        "test_loss": [],
+        "train_accuracy": [],
+        "test_accuracy": []
+    }
+    
+    for epoch in range(n_epochs):
         model.train()
         for X_batch, v_batch in train_loader:
             X_batch, v_batch = X_batch.to(device), v_batch.to(device)
-
-            y_batch = model(X_batch)
-            loss = loss_fn(y_batch, v_batch)
-
             optimizer.zero_grad()
+            outputs = model(X_batch)
+            loss = loss_fn(outputs, v_batch)
             loss.backward()
             optimizer.step()
+        
+        train_loss, train_accuracy = evaluate(model, train_loader, loss_fn, device)
+        test_loss, test_accuracy = evaluate(model, test_loader, loss_fn, device)
+        
+        history["train_loss"].append(train_loss)
+        history["test_loss"].append(test_loss)
+        history["train_accuracy"].append(train_accuracy)
+        history["test_accuracy"].append(test_accuracy)
+        
+        print(f'Epoch {epoch+1}/{n_epochs} - Train Loss: {train_loss:.4f}, Test Loss: {test_loss:.4f}, Train Accuracy: {train_accuracy:.4f}, Test Accuracy: {test_accuracy:.4f}')
+    
+    return history
 
-        # Evaluate
-        train_loss, test_loss = evaluate(model, train_loader, test_loader, loss_fn, device)
-        train_risk.append(train_loss)
-        test_risk.append(test_loss)
-
-    return train_risk, test_risk
-
-def evaluate(model, train_loader, test_loader, loss_fn, device):
+def evaluate(model, data_loader, loss_fn, device):
     model.eval()
-    train_loss, test_loss = 0.0, 0.0
-
+    total_loss = 0.0
+    correct_predictions = 0
+    total_samples = 0
+    
     with torch.no_grad():
-        for X_batch, v_batch in train_loader:
+        for X_batch, v_batch in data_loader:
             X_batch, v_batch = X_batch.to(device), v_batch.to(device)
-            y_train = model(X_batch)
-            train_loss += loss_fn(y_train, v_batch).item()
-
-        for X_batch, v_batch in test_loader:
-            X_batch, v_batch = X_batch.to(device), v_batch.to(device)
-            y_test = model(X_batch)
-            test_loss += loss_fn(y_test, v_batch).item()
-
-    train_loss /= len(train_loader.dataset)
-    test_loss /= len(test_loader.dataset)
-
-    return train_loss, test_loss
+            outputs = model(X_batch)
+            loss = loss_fn(outputs, v_batch)
+            total_loss += loss.item()
+            
+            _, predicted = torch.max(outputs.data, 1)
+            total_samples += v_batch.size(0)
+            correct_predictions += (predicted == v_batch).sum().item()
+    
+    average_loss = total_loss / len(data_loader)
+    accuracy = correct_predictions / total_samples
+    return average_loss, accuracy
 
 
 
@@ -128,25 +136,38 @@ def evaluate(model, train_loader, test_loader, loss_fn, device):
 
 
 def main():
-    # load MusicDataset
     input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
-    #music_dataset = MusicDataset(input, target)
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
+    
     lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
-    train_risk, test_risk = training_loop(lstm_model, n_epochs, batch_size, X_train, v_train, X_test, v_test)
+    history = training_loop(lstm_model, n_epochs, X_train, v_train, X_test, v_test)
+    #train_risk, test_risk = training_loop(lstm_model, n_epochs, X_train, v_train, X_test, v_test)
 
     # save the model
     model_save_path = "trained_lstm_model.pth"
     torch.save(lstm_model.state_dict(), model_save_path)
 
-    plt.figure(figsize=(10, 6))
-    plt.plot(train_risk, label='Training Loss')
-    plt.plot(test_risk, label='Test Loss')
+    plt.figure(figsize=(12, 6))
+
+    # Plotting training and validation loss
+    plt.subplot(1, 2, 1)
+    plt.plot(history['train_loss'], label='Training Loss')
+    plt.plot(history['test_loss'], label='Validation Loss')
+    plt.title('Loss over Epochs')
     plt.xlabel('Epochs')
     plt.ylabel('Loss')
-    plt.title('Training Loss Over Epochs')
     plt.legend()
-    plt.grid(True)
+
+    # Plotting training and validation accuracy
+    plt.subplot(1, 2, 2)
+    plt.plot(history['train_accuracy'], label='Training Accuracy')
+    plt.plot(history['test_accuracy'], label='Validation Accuracy')
+    plt.title('Accuracy over Epochs')
+    plt.xlabel('Epochs')
+    plt.ylabel('Accuracy')
+    plt.legend()
+
+    plt.tight_layout()
     plt.show()
 
 

@@ -80,4 +80,4 @@ seed = "67 _ 67 _ 67 _ _ 65 64 _ 64 _ 64 _ _"
 seed2 = "64 _ 69 _ _ _ 71 _ 72 _ _ 71 69 _ 76 _ _ _ _ _ 71 _ _ _ 74 _ 72 _ _ "
 sequence_length = 50
 notes = generate_music_sequence(lstm_model, seed2, sequence_length, temperature=0.8)
-save_melody_to_midi(notes, "generated_melody4.mid")
+save_melody_to_midi(notes, "generated_melody6.mid")

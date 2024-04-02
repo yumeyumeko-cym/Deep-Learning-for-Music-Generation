@@ -46,7 +46,7 @@ def load_songs_in_kern(dataset_path):
     for path, subdirs, files in os.walk(dataset_path):
         for file in files:
 
-            # Consider only MIDI files
+            # Consider only kern files
             if file.lower().endswith(".krn"):
                 song = m21.converter.parse(os.path.join(path, file))
                 songs.append(song)

@@ -63,6 +63,7 @@ class myLSTM(nn.Module):
         lstm_out = self.batchnorm(lstm_out)
 
         out = self.dropout(lstm_out)
+        out = lstm_out
         out = self.fc(out)
 
         return out

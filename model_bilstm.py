@@ -1,7 +1,5 @@
 import torch
 import torch.nn as nn
-import torchvision
-import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, TensorDataset
 from preprocessing import *
 from sklearn.model_selection import train_test_split
@@ -12,18 +10,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Hyperparameters
 hidden_size = 256
-input_size = 18 # number of features in json file
 num_layers = 2
-output_unit = 18
 
 # training parameters
 n_epochs = 100   # number of epochs
 batch_size = 64  # batch size
 
 
-
-# load MusicDataset
-input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
 
 def data_splitter(X, v, batch_size, train_size):
     X_train, X_test, v_train, v_test = train_test_split(X, v, train_size=train_size, shuffle=True, random_state=1)
@@ -55,7 +48,7 @@ class myBiLSTM(nn.Module):
         h0 = torch.zeros(self.num_layers*2, x.size(0), self.hidden_size).to(x.device) 
         c0 = torch.zeros(self.num_layers*2, x.size(0), self.hidden_size).to(x.device)
         lstm_out, _ = self.lstm(x, (h0, c0)) 
-        # Applying batch normalization to the output for the last time step from each direction
+        # Take last time step from both directions: shape (batch, hidden*2).
         lstm_out = self.batchnorm(lstm_out[:, -1, :])
         lstm_out = self.dropout(lstm_out) 
         out = self.fc(lstm_out) 
@@ -130,9 +123,10 @@ def evaluate(model, data_loader, loss_fn, device):
 
 def main():
     input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
+    vocab_size = input.shape[-1]
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
     
-    bilstm_model = myBiLSTM(input_size, hidden_size, num_layers, output_unit)
+    bilstm_model = myBiLSTM(vocab_size, hidden_size, num_layers, vocab_size)
     history = training_loop(bilstm_model, n_epochs, X_train, v_train, X_test, v_test)
     #train_risk, test_risk = training_loop(lstm_model, n_epochs, X_train, v_train, X_test, v_test)
 

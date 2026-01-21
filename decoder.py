@@ -1,16 +1,20 @@
 import numpy as np
 import torch
 import music21 as m21
-from model_bilstm import *
-from preprocessing import *
 import torch.nn.functional as F
+import json
+from model_bilstm import myBiLSTM, hidden_size, num_layers
+from preprocessing import MAPPING_FILE_PATH, SEQUENCE_LENGTH
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Sample with temperature
 def sample_with_temperature(logits, sequence_length, max_sequence_length, temperature=1.0):
     if temperature is None:
         # dynamic temperature adjustment
         temperature = max(0.5, 1 - (sequence_length / max_sequence_length))
-    probabilities = torch.softmax(logits / temperature, dim=0)
+    # Softmax over vocab dimension to get a categorical distribution.
+    probabilities = torch.softmax(logits / temperature, dim=-1)
     sampled_indices = torch.multinomial(probabilities, 1)
     return sampled_indices.squeeze().cpu().numpy()
 
@@ -40,7 +44,7 @@ def generate_music_sequence(model, seed, max_sequence_length, temperature=1.0):
             input_sequence += [0] * (SEQUENCE_LENGTH - len(input_sequence))  # Pad sequence
             input_tensor = torch.tensor([input_sequence], dtype=torch.long).to(device)
 
-            # One-hot encode the input tensor
+            # One-hot encode to match training input shape.
             input_tensor_one_hot = F.one_hot(input_tensor, num_classes=len(mappings)).float().to(device)
 
             logits = model(input_tensor_one_hot)
@@ -52,29 +56,43 @@ def generate_music_sequence(model, seed, max_sequence_length, temperature=1.0):
     return generated_notes
 
 # create a function to save a melody to a MIDI file
-def save_melody_to_midi(notes, file_name="generated_melody.mid"):
+def save_melody_to_midi(notes, file_name="generated_melody.mid", time_step=0.25):
     stream = m21.stream.Stream()
-    current_duration = 1.0
-    for note_val in notes:
-        if note_val == '_':
-            # Add a quarter for a each _ character
-            current_duration = current_duration / 2
+    current_symbol = None
+    current_duration = 0.0
+
+    def flush_event():
+        nonlocal current_symbol, current_duration
+        if current_symbol is None:
+            return
+        if current_symbol == 'r':
+            m21_note = m21.note.Rest(quarterLength=current_duration)
+        elif current_symbol.isdigit():
+            m21_note = m21.note.Note(int(current_symbol), quarterLength=current_duration)
         else:
-            if note_val == 'r':
-                m21_note = m21.note.Rest(quarterLength=current_duration)
-            elif note_val in ['/','|']:
-                continue
-            else:
-                m21_note = m21.note.Note(int(note_val), quarterLength=current_duration) if note_val.isdigit() else None
-            
-            if m21_note:
-                stream.append(m21_note)
-            current_duration = 1.0
+            m21_note = None
+        if m21_note:
+            stream.append(m21_note)
+        current_symbol = None
+        current_duration = 0.0
+
+    for note_val in notes:
+        if note_val in ['/', '|']:
+            flush_event()
+            continue
+        if note_val == '_':
+            if current_symbol is not None:
+                # Extend the previous note/rest by one time step.
+                current_duration += time_step
+            continue
+        flush_event()
+        current_symbol = note_val
+        current_duration = time_step
+    flush_event()
     stream.write('midi', fp=file_name)
 
-# load the model
-#lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
-lstm_model = myBiLSTM(input_size, hidden_size, num_layers, output_unit)
+vocab_size = len(mappings)
+lstm_model = myBiLSTM(vocab_size, hidden_size, num_layers, vocab_size)
 
 #lstm_model.load_state_dict(torch.load('trained_lstm_model.pth', map_location=device))
 lstm_model.load_state_dict(torch.load('trained_bi_lstm_model.pth', map_location=device))

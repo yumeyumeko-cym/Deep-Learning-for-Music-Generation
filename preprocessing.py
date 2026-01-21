@@ -142,15 +142,16 @@ def encode(song, time_step=0.25):
 def preprocess(dataset_path):
     songs = load_songs_in_kern(dataset_path)
     print(f"Loaded {len(songs)} songs.")
+    os.makedirs(SAVE_DIR, exist_ok=True)
     
     for i, song in tqdm(enumerate(songs), total=len(songs), desc="Processing songs"):
         if not valid_durations(song, ACCEPTABLE_DURATIONS):
             continue
 
-        # transpose song to Cmaj/Amin
+        # Normalize key to reduce harmonic variance during training.
         song = transpose_to_Cmaj_Amin(song)
 
-        # encode song
+        # Encode into fixed time steps for model input.
         song_encoded = encode(song)
 
         # Ensure the 'preprocessed' directory exists
@@ -179,6 +180,7 @@ def collating(dataset_path, file_dataset_path, sequence_length):
     :param sequence_length (int): number of delimiters used to separate songs
     :return <class 'str'> encoded songs with delimiters
     """
+    # Use "/" as a delimiter token between songs.
     new_song_delimiter = "/ " * sequence_length
     songs = ""
 
@@ -218,7 +220,7 @@ def map_json(file_dataset_path, file_mapping_path):
     # Use a set to find unique symbols
     unique_symbols = set(symbols)
     
-    # Create a mapping from symbols to integers
+    # Create a stable mapping so vocab indices are deterministic.
     symbol_to_int = {symbol: i for i, symbol in enumerate(sorted(unique_symbols))}
     
     # Save the mapping to a JSON file
@@ -226,6 +228,11 @@ def map_json(file_dataset_path, file_mapping_path):
         json.dump(symbol_to_int, f, indent=4)
 
     return symbol_to_int
+
+def get_vocabulary_size(mapping_path=MAPPING_FILE_PATH):
+    with open(mapping_path, "r") as f:
+        mapping = json.load(f)
+    return len(mapping)
 
 def mapping_songs(file_mapping_path, songs):
     """
@@ -262,11 +269,12 @@ def generate_training_sequences_pytorch(sequence_length):
     inputs = []
     targets = []
 
+    # The training data is a single stream with delimiters.
     songs = load(TRAINING_DATASET_FILE_PATH)
     mapped_songs = mapping_songs(MAPPING_FILE_PATH, songs)
 
 
-    # Generate the training sequences
+    # Generate sliding windows for next-token prediction.
     num_sequences = len(mapped_songs) - sequence_length
 
     for i in range(num_sequences):
@@ -278,6 +286,7 @@ def generate_training_sequences_pytorch(sequence_length):
     inputs_tensor = torch.tensor(inputs, dtype=torch.long)
     targets_tensor = torch.tensor(targets, dtype=torch.long)
 
+    # One-hot inputs so the LSTM sees token identity without embedding.
     inputs_one_hot = F.one_hot(inputs_tensor, num_classes=vocabulary_size).float()
 
     return inputs_one_hot, targets_tensor

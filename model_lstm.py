@@ -10,18 +10,13 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Hyperparameters
 hidden_size = 256
-input_size = 18 # number of features in json file
 num_layers = 3
-output_unit = 18
 
 # training parameters
 n_epochs = 100   # number of epochs
 batch_size = 64  # batch size
 
 
-
-# load MusicDataset
-input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
 
 def data_splitter(X, v, batch_size, train_size):
     X_train, X_test, v_train, v_test = train_test_split(X, v, train_size=train_size, shuffle=True, random_state=1)
@@ -41,7 +36,6 @@ def data_splitter(X, v, batch_size, train_size):
 class myLSTM(nn.Module):
     def __init__(self, input_size, hidden_size, num_layers, num_classes):
         super(myLSTM, self).__init__()
-        self.batch_size = batch_size
         self.hidden_size = hidden_size
         self.input_size = input_size
         self.num_layers = num_layers
@@ -56,14 +50,13 @@ class myLSTM(nn.Module):
         self.fc = nn.Linear(hidden_size, num_classes)
     
     def forward(self, x):
-        # Set initial hidden and cell states
+        # x shape: (batch, seq_len, vocab_size)
         lstm_out, (h_n, c_n) = self.lstm(x)
         lstm_out = lstm_out[:, -1, :]
         # Applying batch normalization
         lstm_out = self.batchnorm(lstm_out)
 
         out = self.dropout(lstm_out)
-        out = lstm_out
         out = self.fc(out)
 
         return out
@@ -138,9 +131,10 @@ def evaluate(model, data_loader, loss_fn, device):
 
 def main():
     input, target = generate_training_sequences_pytorch(SEQUENCE_LENGTH)
+    vocab_size = input.shape[-1]
     X_train, v_train, X_test, v_test = data_splitter(input, target, batch_size, 0.8)
     
-    lstm_model = myLSTM(input_size, hidden_size, num_layers, output_unit)
+    lstm_model = myLSTM(vocab_size, hidden_size, num_layers, vocab_size)
     history = training_loop(lstm_model, n_epochs, X_train, v_train, X_test, v_test)
     #train_risk, test_risk = training_loop(lstm_model, n_epochs, X_train, v_train, X_test, v_test)
 
